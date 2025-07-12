@@ -1,0 +1,551 @@
+// Simplified Prisma schema for SQLite - Retail Business Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================
+// CORE SYSTEM MODELS
+// =============================================
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  firstName    String   @map("first_name")
+  lastName     String   @map("last_name")
+  role         String   // Changed from enum to string
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  managedStores      Store[]              @relation("StoreManager")
+  userStores         UserStore[]
+  createdPurchaseOrders PurchaseOrder[]   @relation("CreatedBy")
+  inventoryMovements InventoryMovement[]
+  sales              Sale[]               @relation("Cashier")
+  processedReturns   Return[]             @relation("ProcessedBy")
+  leadActivities     LeadActivity[]
+  assignedLeads      Lead[]               @relation("AssignedTo")
+
+  @@map("users")
+}
+
+model Store {
+  id        Int      @id @default(autoincrement())
+  name      String
+  address   String
+  city      String
+  state     String
+  zipCode   String   @map("zip_code")
+  phone     String?
+  email     String?
+  managerId Int?     @map("manager_id")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  manager            User?                @relation("StoreManager", fields: [managerId], references: [id])
+  userStores         UserStore[]
+  inventory          Inventory[]
+  purchaseOrders     PurchaseOrder[]
+  sales              Sale[]
+  invoices           Invoice[]
+  returns            Return[]
+  inventoryMovements InventoryMovement[]
+  dailySalesSummary  DailySalesSummary[]
+
+  @@map("stores")
+}
+
+model UserStore {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  storeId   Int      @map("store_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storeId])
+  @@map("user_stores")
+}
+
+// =============================================
+// CRM MODULE MODELS
+// =============================================
+
+model Customer {
+  id               Int       @id @default(autoincrement())
+  customerCode     String    @unique @map("customer_code")
+  firstName        String    @map("first_name")
+  lastName         String    @map("last_name")
+  email            String?
+  phone            String?
+  dateOfBirth      DateTime? @map("date_of_birth")
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?   @map("zip_code")
+  customerType     String    @default("REGULAR") @map("customer_type") // Changed from enum
+  loyaltyPoints    Int       @default(0) @map("loyalty_points")
+  totalSpent       Float     @default(0.00) @map("total_spent") // Changed from Decimal
+  lastPurchaseDate DateTime? @map("last_purchase_date")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  preferences         CustomerPreference?
+  sales               Sale[]
+  invoices            Invoice[]
+  returns             Return[]
+  loyaltyTransactions LoyaltyTransaction[]
+  leads               Lead[]
+
+  @@map("customers")
+}
+
+model CustomerPreference {
+  id                     Int      @id @default(autoincrement())
+  customerId             Int      @unique @map("customer_id")
+  emailNotifications     Boolean  @default(true) @map("email_notifications")
+  smsNotifications       Boolean  @default(false) @map("sms_notifications")
+  promotionalEmails      Boolean  @default(true) @map("promotional_emails")
+  preferredContactMethod String   @default("EMAIL") @map("preferred_contact_method") // Changed from enum
+  createdAt              DateTime @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_preferences")
+}
+
+model Lead {
+  id                Int       @id @default(autoincrement())
+  firstName         String    @map("first_name")
+  lastName          String    @map("last_name")
+  email             String?
+  phone             String?
+  source            String?
+  status            String    @default("NEW") // Changed from enum
+  assignedTo        Int?      @map("assigned_to")
+  notes             String?
+  estimatedValue    Float?    @map("estimated_value") // Changed from Decimal
+  expectedCloseDate DateTime? @map("expected_close_date")
+  customerId        Int?      @map("customer_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  assignedUser User?          @relation("AssignedTo", fields: [assignedTo], references: [id])
+  customer     Customer?      @relation(fields: [customerId], references: [id])
+  activities   LeadActivity[]
+
+  @@map("leads")
+}
+
+model LeadActivity {
+  id            Int       @id @default(autoincrement())
+  leadId        Int       @map("lead_id")
+  userId        Int?      @map("user_id")
+  activityType  String    @map("activity_type") // Changed from enum
+  description   String
+  scheduledDate DateTime? @map("scheduled_date")
+  completedDate DateTime? @map("completed_date")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@map("lead_activities")
+}
+
+model LoyaltyProgram {
+  id               Int       @id @default(autoincrement())
+  name             String
+  description      String?
+  pointsPerDollar  Float     @default(1.00) @map("points_per_dollar") // Changed from Decimal
+  minimumPurchase  Float     @default(0.00) @map("minimum_purchase") // Changed from Decimal
+  isActive         Boolean   @default(true) @map("is_active")
+  startDate        DateTime? @map("start_date")
+  endDate          DateTime? @map("end_date")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@map("loyalty_programs")
+}
+
+model LoyaltyTransaction {
+  id              Int      @id @default(autoincrement())
+  customerId      Int      @map("customer_id")
+  transactionType String   @map("transaction_type") // Changed from enum
+  points          Int
+  description     String?
+  referenceId     Int?     @map("reference_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("loyalty_transactions")
+}
+
+// =============================================
+// ERP MODULE MODELS
+// =============================================
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  parentId    Int?      @map("parent_id")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Supplier {
+  id           Int      @id @default(autoincrement())
+  name         String
+  contactPerson String? @map("contact_person")
+  email        String?
+  phone        String?
+  address      String?
+  city         String?
+  state        String?
+  zipCode      String?  @map("zip_code")
+  paymentTerms String?  @map("payment_terms")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+model Product {
+  id             Int      @id @default(autoincrement())
+  sku            String   @unique
+  name           String
+  description    String?
+  categoryId     Int?     @map("category_id")
+  supplierId     Int?     @map("supplier_id")
+  costPrice      Float    @map("cost_price") // Changed from Decimal
+  sellingPrice   Float    @map("selling_price") // Changed from Decimal
+  minStockLevel  Int      @default(0) @map("min_stock_level")
+  maxStockLevel  Int      @default(1000) @map("max_stock_level")
+  unitOfMeasure  String   @default("piece") @map("unit_of_measure")
+  barcode        String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  variants           ProductVariant[]
+  inventory          Inventory[]
+  purchaseOrderItems PurchaseOrderItem[]
+  saleItems          SaleItem[]
+  returnItems        ReturnItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@map("products")
+}
+
+model ProductVariant {
+  id             Int     @id @default(autoincrement())
+  productId      Int     @map("product_id")
+  variantName    String  @map("variant_name")
+  variantValue   String  @map("variant_value")
+  additionalCost Float   @default(0.00) @map("additional_cost") // Changed from Decimal
+  skuSuffix      String? @map("sku_suffix")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_variants")
+}
+
+model Inventory {
+  id               Int      @id @default(autoincrement())
+  productId        Int      @map("product_id")
+  storeId          Int      @map("store_id")
+  quantityOnHand   Int      @default(0) @map("quantity_on_hand")
+  quantityReserved Int      @default(0) @map("quantity_reserved")
+  lastUpdated      DateTime @default(now()) @map("last_updated")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, storeId])
+  @@map("inventory")
+}
+
+model PurchaseOrder {
+  id                   Int      @id @default(autoincrement())
+  poNumber             String   @unique @map("po_number")
+  supplierId           Int      @map("supplier_id")
+  storeId              Int      @map("store_id")
+  status               String   @default("PENDING") // Changed from enum
+  orderDate            DateTime @map("order_date")
+  expectedDeliveryDate DateTime? @map("expected_delivery_date")
+  totalAmount          Float    @default(0.00) @map("total_amount") // Changed from Decimal
+  notes                String?
+  createdBy            Int      @map("created_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  // Relations
+  supplier Supplier            @relation(fields: [supplierId], references: [id])
+  store    Store               @relation(fields: [storeId], references: [id])
+  creator  User                @relation("CreatedBy", fields: [createdBy], references: [id])
+  items    PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                Int     @id @default(autoincrement())
+  purchaseOrderId   Int     @map("purchase_order_id")
+  productId         Int     @map("product_id")
+  quantity          Int
+  unitCost          Float   @map("unit_cost") // Changed from Decimal
+  totalCost         Float   @map("total_cost") // Changed from Decimal
+  receivedQuantity  Int     @default(0) @map("received_quantity")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  // Relations
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+model InventoryMovement {
+  id           Int      @id @default(autoincrement())
+  productId    Int      @map("product_id")
+  storeId      Int      @map("store_id")
+  movementType String   @map("movement_type") // Changed from enum
+  quantity     Int
+  referenceId  Int?     @map("reference_id")
+  notes        String?
+  createdBy    Int      @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  product   Product @relation(fields: [productId], references: [id])
+  store     Store   @relation(fields: [storeId], references: [id])
+  createdUser User  @relation(fields: [createdBy], references: [id])
+
+  @@map("inventory_movements")
+}
+
+// =============================================
+// BILLING AND FINANCIAL MODULE MODELS
+// =============================================
+
+model Sale {
+  id            Int      @id @default(autoincrement())
+  saleNumber    String   @unique @map("sale_number")
+  customerId    Int?     @map("customer_id")
+  storeId       Int      @map("store_id")
+  cashierId     Int      @map("cashier_id")
+  saleDate      DateTime @default(now()) @map("sale_date")
+  subtotal      Float    @map("subtotal") // Changed from Decimal
+  taxAmount     Float    @default(0.00) @map("tax_amount") // Changed from Decimal
+  discountAmount Float   @default(0.00) @map("discount_amount") // Changed from Decimal
+  totalAmount   Float    @map("total_amount") // Changed from Decimal
+  paymentStatus String   @default("COMPLETED") @map("payment_status") // Changed from enum
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer?  @relation(fields: [customerId], references: [id])
+  store    Store      @relation(fields: [storeId], references: [id])
+  cashier  User       @relation("Cashier", fields: [cashierId], references: [id])
+  items    SaleItem[]
+  payments Payment[]
+  invoices Invoice[]
+  returns  Return[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id             Int     @id @default(autoincrement())
+  saleId         Int     @map("sale_id")
+  productId      Int     @map("product_id")
+  quantity       Int
+  unitPrice      Float   @map("unit_price") // Changed from Decimal
+  discountAmount Float   @default(0.00) @map("discount_amount") // Changed from Decimal
+  totalPrice     Float   @map("total_price") // Changed from Decimal
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // Relations
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("sale_items")
+}
+
+model PaymentMethod {
+  id        Int      @id @default(autoincrement())
+  name      String
+  type      String   // Changed from enum
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  payments Payment[]
+
+  @@map("payment_methods")
+}
+
+model Payment {
+  id                   Int      @id @default(autoincrement())
+  saleId               Int      @map("sale_id")
+  paymentMethodId      Int      @map("payment_method_id")
+  amount               Float    // Changed from Decimal
+  transactionReference String?  @map("transaction_reference")
+  paymentDate          DateTime @default(now()) @map("payment_date")
+  status               String   @default("COMPLETED") // Changed from enum
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  // Relations
+  sale          Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  paymentMethod PaymentMethod @relation(fields: [paymentMethodId], references: [id])
+
+  @@map("payments")
+}
+
+model Invoice {
+  id            Int      @id @default(autoincrement())
+  invoiceNumber String   @unique @map("invoice_number")
+  customerId    Int      @map("customer_id")
+  saleId        Int?     @map("sale_id")
+  storeId       Int      @map("store_id")
+  invoiceDate   DateTime @map("invoice_date")
+  dueDate       DateTime? @map("due_date")
+  subtotal      Float    // Changed from Decimal
+  taxAmount     Float    @default(0.00) @map("tax_amount") // Changed from Decimal
+  totalAmount   Float    @map("total_amount") // Changed from Decimal
+  paidAmount    Float    @default(0.00) @map("paid_amount") // Changed from Decimal
+  status        String   @default("PENDING") // Changed from enum
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relations
+  customer Customer @relation(fields: [customerId], references: [id])
+  sale     Sale?    @relation(fields: [saleId], references: [id])
+  store    Store    @relation(fields: [storeId], references: [id])
+
+  @@map("invoices")
+}
+
+model TaxRate {
+  id            Int      @id @default(autoincrement())
+  name          String
+  rate          Float    // Changed from Decimal
+  type          String   // Changed from enum
+  isActive      Boolean  @default(true) @map("is_active")
+  effectiveDate DateTime? @map("effective_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("tax_rates")
+}
+
+model Promotion {
+  id              Int      @id @default(autoincrement())
+  name            String
+  description     String?
+  type            String   // Changed from enum
+  value           Float    // Changed from Decimal
+  minimumPurchase Float    @default(0.00) @map("minimum_purchase") // Changed from Decimal
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("promotions")
+}
+
+model Return {
+  id                 Int      @id @default(autoincrement())
+  returnNumber       String   @unique @map("return_number")
+  originalSaleId     Int      @map("original_sale_id")
+  customerId         Int      @map("customer_id")
+  storeId            Int      @map("store_id")
+  processedBy        Int      @map("processed_by")
+  returnDate         DateTime @default(now()) @map("return_date")
+  reason             String?
+  totalRefundAmount  Float    @map("total_refund_amount") // Changed from Decimal
+  status             String   @default("PENDING") // Changed from enum
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  originalSale Sale        @relation(fields: [originalSaleId], references: [id])
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  store        Store       @relation(fields: [storeId], references: [id])
+  processor    User        @relation("ProcessedBy", fields: [processedBy], references: [id])
+  items        ReturnItem[]
+
+  @@map("returns")
+}
+
+model ReturnItem {
+  id           Int      @id @default(autoincrement())
+  returnId     Int      @map("return_id")
+  productId    Int      @map("product_id")
+  quantity     Int
+  unitPrice    Float    @map("unit_price") // Changed from Decimal
+  refundAmount Float    @map("refund_amount") // Changed from Decimal
+  condition    String   @default("GOOD") // Changed from enum
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  return  Return  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("return_items")
+}
+
+// =============================================
+// REPORTING AND ANALYTICS MODELS
+// =============================================
+
+model DailySalesSummary {
+  id                      Int      @id @default(autoincrement())
+  storeId                 Int      @map("store_id")
+  summaryDate             DateTime @map("summary_date")
+  totalSales              Float    @default(0.00) @map("total_sales") // Changed from Decimal
+  totalTransactions       Int      @default(0) @map("total_transactions")
+  totalCustomers          Int      @default(0) @map("total_customers")
+  averageTransactionValue Float    @default(0.00) @map("average_transaction_value") // Changed from Decimal
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  // Relations
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@unique([storeId, summaryDate])
+  @@map("daily_sales_summary")
+}
