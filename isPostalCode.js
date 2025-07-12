@@ -1,12 +1,5 @@
-"use strict";
+import assertString from './util/assertString';
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = isPostalCode;
-exports.locales = void 0;
-var _assertString = _interopRequireDefault(require("./util/assertString"));
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 // common patterns
 var threeDigit = /^\d{3}$/;
 var fourDigit = /^\d{4}$/;
@@ -80,9 +73,9 @@ var patterns = {
   ZA: fourDigit,
   ZM: fiveDigit
 };
-var locales = exports.locales = Object.keys(patterns);
-function isPostalCode(str, locale) {
-  (0, _assertString.default)(str);
+export var locales = Object.keys(patterns);
+export default function isPostalCode(str, locale) {
+  assertString(str);
   if (locale in patterns) {
     return patterns[locale].test(str);
   } else if (locale === 'any') {

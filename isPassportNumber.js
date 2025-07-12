@@ -1,11 +1,5 @@
-"use strict";
+import assertString from './util/assertString';
 
-Object.defineProperty(exports, "__esModule", {
-  value: true
-});
-exports.default = isPassportNumber;
-var _assertString = _interopRequireDefault(require("./util/assertString"));
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 /**
  * Reference:
  * https://en.wikipedia.org/ -- Wikipedia
@@ -142,11 +136,9 @@ var passportRegexByCountryCode = {
  * @param {string} countryCode
  * @return {boolean}
  */
-function isPassportNumber(str, countryCode) {
-  (0, _assertString.default)(str);
+export default function isPassportNumber(str, countryCode) {
+  assertString(str);
   /** Remove All Whitespaces, Convert to UPPERCASE */
   var normalizedStr = str.replace(/\s/g, '').toUpperCase();
   return countryCode.toUpperCase() in passportRegexByCountryCode && passportRegexByCountryCode[countryCode].test(normalizedStr);
 }
-module.exports = exports.default;
-module.exports.default = exports.default;
